@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "version": "1.2",
+    "projectName": "Moje Zahrada 2026",
+    "created": "2026-01-04T22:15:00Z",
+    "units": "meters"
+  },
+  "scene": {
+    "width": 25.0,
+    "height": 15.0,
+    "layers": {
+      "surfaces": [
+        {
+          "id": "s1",
+          "type": "SURFACE",
+          "texture": "grass_01",
+          "geometry": [[0,0], [25,0], [25,15], [0,15]]
+        }
+      ],
+      "objects": [
+        {
+          "id": "obj_123",
+          "sku": "gardena-grill-xyz",
+          "type": "ASSET",
+          "position": { "x": 5.5, "y": 3.2 },
+          "rotation": 45,
+          "scale": { "x": 1.0, "y": 1.0 },
+          "dimensions": { "w": 1.2, "h": 0.8 },
+          "z_index": 10
+        }
+      ],
+      "linear": [
+        {
+          "id": "wall_1",
+          "type": "WALL",
+          "start": { "x": 0, "y": 0 },
+          "end": { "x": 0, "y": 15 },
+          "thickness": 0.2
+        }
+      ]
+    }
+  }
+}

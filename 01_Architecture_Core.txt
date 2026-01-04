@@ -1,0 +1,75 @@
+@startuml
+title Garden Planner - Core Architecture
+skinparam classAttributeIconSize 0
+
+package "App Core" {
+  class GardenApp {
+    - currentPlan: GardenPlan
+    - toolManager: ToolManager
+    - historyManager: HistoryManager
+    - catalog: CatalogService
+    - renderer: CanvasRenderer
+    + init()
+    + loadPlan(json: JSON)
+    + savePlan(): JSON
+  }
+
+  class GardenPlan {
+    - width: float
+    - height: float
+    - layers: Map<LayerType, List<GardenObject>>
+    + addObject(obj: GardenObject)
+    + removeObject(id: UUID)
+    + getObjects(): List<GardenObject>
+  }
+}
+
+package "Domain Objects" {
+  abstract class GardenObject {
+    - id: UUID
+    - position: Vector2
+    - rotation: float
+    - zIndex: int
+    - isSelected: boolean
+    + getBoundingBox(): Rect
+  }
+
+  class SurfaceObject extends GardenObject {
+    note "Trávníky, dlažba (polygony)"
+    - points: List<Vector2>
+    - textureId: String
+  }
+
+  class LinearObject extends GardenObject {
+    note "Ploty, zídky"
+    - startPoint: Vector2
+    - endPoint: Vector2
+    - thickness: float
+  }
+
+  class AssetObject extends GardenObject {
+    note "Stromy, nábytek (sprity)"
+    - catalogItemId: String
+    - dimensions: Vector2
+  }
+}
+
+package "Catalog Service" {
+  class CatalogService {
+    + getCategories(): List<Category>
+    + getItem(sku: String): CatalogItem
+  }
+  
+  class CatalogItem {
+    - sku: String
+    - name: String
+    - defaultSize: Vector2
+    - resources: ResourcePaths
+  }
+}
+
+GardenApp --> GardenPlan
+GardenApp --> CatalogService
+GardenPlan *-- GardenObject
+AssetObject ..> CatalogItem : references
+@enduml

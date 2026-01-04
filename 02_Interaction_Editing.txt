@@ -1,0 +1,60 @@
+@startuml
+title Garden Planner - Interaction & Editing Logic
+skinparam classAttributeIconSize 0
+
+package "Input & Math" {
+  class Viewport {
+    - zoomLevel: float
+    - panOffset: Vector2
+    + screenToWorld(x, y): Vector2
+    + worldToScreen(x, y): Vector2
+  }
+
+  class InputHandler {
+    + onMouseDown(e)
+    + onMouseMove(e)
+    + onMouseUp(e)
+  }
+}
+
+package "Tools & State" {
+  class ToolManager {
+    - activeTool: Tool
+    + setTool(tool: Tool)
+  }
+
+  interface Tool {
+    + onDragStart(worldPos)
+    + onDragMove(worldPos)
+    + onDragEnd()
+  }
+
+  class SelectionManager {
+    - selectedObjects: Set<UUID>
+    - activeGizmo: TransformGizmo
+    + select(obj)
+  }
+}
+
+package "Visual Helpers" {
+  class TransformGizmo {
+    note "Rámeček s úchyty pro změnu velikosti/rotaci"
+    - bounds: Rect
+    - handles: List<Handle>
+    + render(ctx)
+    + hitTest(worldPos): HandleType
+  }
+
+  class SmartGuideSystem {
+    note "Inteligentní kótování a přitahování"
+    + findSnaps(activeObj, otherObjects): List<SnapLine>
+    + renderGuides(ctx)
+  }
+}
+
+InputHandler --> Viewport : "converts coords"
+InputHandler --> ToolManager : "delegates events"
+ToolManager --> SelectionManager
+SelectionManager --> TransformGizmo : "creates"
+SelectionManager --> SmartGuideSystem : "uses during drag"
+@enduml

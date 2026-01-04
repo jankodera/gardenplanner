@@ -1,0 +1,46 @@
+@startuml
+title Garden Planner - Infrastructure & Export
+skinparam classAttributeIconSize 0
+
+package "Resource Management" {
+  class AssetLoader {
+    - imageCache: Map<String, HTMLImageElement>
+    - pendingRequests: Queue
+    + loadAssets(urls: List<String>): Promise
+    + getAsset(id: String): Image
+  }
+  
+  class PatternGenerator {
+    + createTilingPattern(ctx, imgId): CanvasPattern
+  }
+}
+
+package "Export System" {
+  interface IExporter {
+    + export(plan: GardenPlan): Blob
+  }
+
+  class JSONExporter implements IExporter {
+    note "Ukládání projektu (GDF formát)"
+    + export(plan): JSON
+  }
+  
+  class BillOfMaterialsExporter implements IExporter {
+    note "Nákupní seznam (CSV/PDF)"
+    + export(plan): CSV
+  }
+  
+  class DXFExporter implements IExporter {
+    note "CAD formát pro architekty"
+    + export(plan): DXF String
+  }
+}
+
+class CanvasRenderer {
+  - assets: AssetLoader
+  + renderFrame(plan, viewport)
+}
+
+CanvasRenderer --> AssetLoader : "requests sprites"
+CanvasRenderer --> PatternGenerator : "requests textures"
+@enduml
