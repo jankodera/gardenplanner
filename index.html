@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Garden Planner</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-alt: #111827;
+      --text: #e2e8f0;
+      --accent: #34d399;
+      --accent-2: #60a5fa;
+      --danger: #f87171;
+      --grid: rgba(226, 232, 240, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      display: grid;
+      grid-template-columns: 260px 1fr 320px;
+      grid-template-rows: 60px 1fr;
+      grid-template-areas: "header header header" "sidebar main inspector";
+      height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    header {
+      grid-area: header;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: linear-gradient(90deg, #0b1224, #0f172a);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+    }
+
+    header h1 { font-size: 18px; letter-spacing: 0.3px; margin: 0; }
+
+    .btn {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: rgba(255,255,255,0.18); }
+    .btn.primary { background: linear-gradient(135deg, #10b981, #22d3ee); border: none; color: #0b1020; font-weight: 700; box-shadow: 0 6px 20px rgba(16,185,129,0.35); }
+    .btn.danger { background: rgba(248,113,113,0.14); color: #fecdd3; border-color: rgba(248,113,113,0.5); }
+
+    #sidebar, #inspector {
+      background: var(--panel);
+      border-right: 1px solid rgba(255,255,255,0.06);
+      padding: 12px;
+      overflow-y: auto;
+    }
+    #inspector { border-left: 1px solid rgba(255,255,255,0.06); border-right: none; }
+    #main { grid-area: main; position: relative; background: var(--panel-alt); }
+
+    #canvas { width: 100%; height: 100%; display: block; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.04), transparent 35%), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.03), transparent 40%), #0b1224; }
+
+    .panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #cbd5e1; margin: 12px 0 6px; }
+    .tool-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .tool { padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid transparent; cursor: pointer; text-align: center; transition: all 0.15s ease; font-size: 13px; }
+    .tool.active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(52,211,153,0.35), 0 8px 20px rgba(0,0,0,0.3); }
+    .tool:hover { border-color: rgba(255,255,255,0.12); }
+
+    .catalog-item {
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.03);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: border 0.15s ease, transform 0.15s ease;
+    }
+    .catalog-item:hover { border-color: rgba(255,255,255,0.14); transform: translateY(-1px); }
+    .catalog-item.active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(52,211,153,0.35); }
+    .catalog-item small { color: #94a3b8; }
+
+    #inspector .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    #inspector label { display: block; font-size: 12px; color: #cbd5e1; margin-bottom: 4px; }
+    #inspector input { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: #0b1224; color: var(--text); }
+
+    .status-bar { position: absolute; bottom: 12px; left: 12px; background: rgba(15,23,42,0.85); padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); display: flex; gap: 12px; font-size: 12px; color: #cbd5e1; pointer-events: none; }
+
+    .tag { padding: 4px 8px; border-radius: 999px; background: rgba(148,163,184,0.15); font-size: 11px; color: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <h1>Garden Planner</h1>
+      <span class="tag">UML-driven prototype</span>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button id="btn-load" class="btn">Load sample</button>
+      <button id="btn-save" class="btn">Export JSON</button>
+      <button id="btn-bom" class="btn">Export BOM</button>
+      <button id="btn-reset" class="btn danger">Reset</button>
+    </div>
+  </header>
+
+  <aside id="sidebar" style="grid-area: sidebar;">
+    <div class="panel-title">Tools</div>
+    <div class="tool-grid" id="tool-buttons"></div>
+
+    <div class="panel-title">Catalog</div>
+    <div id="catalog-list"></div>
+  </aside>
+
+  <main id="main">
+    <canvas id="canvas"></canvas>
+    <div class="status-bar" id="status"></div>
+  </main>
+
+  <aside id="inspector" style="grid-area: inspector;">
+    <div class="panel-title">Inspector</div>
+    <div class="card">
+      <label>Scene size (m)</label>
+      <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+        <input id="scene-width" type="number" step="0.5" placeholder="Width" />
+        <input id="scene-height" type="number" step="0.5" placeholder="Height" />
+      </div>
+    </div>
+    <div class="card" id="selection-card">
+      <div id="selection-empty" style="color:#94a3b8;">No selection</div>
+      <div id="selection-fields" style="display:none;">
+        <label>Name</label>
+        <input id="sel-name" />
+        <label>Position (m)</label>
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+          <input id="sel-x" type="number" step="0.1" />
+          <input id="sel-y" type="number" step="0.1" />
+        </div>
+        <label>Rotation (deg)</label>
+        <input id="sel-rot" type="number" step="1" />
+        <label>Size (m)</label>
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+          <input id="sel-w" type="number" step="0.1" />
+          <input id="sel-h" type="number" step="0.1" />
+        </div>
+      </div>
+    </div>
+    <div class="panel-title">Export</div>
+    <div class="card">
+      <p style="margin-top:0; color:#cbd5e1; font-size:13px;">Exports follow the GDF data-spec and expose BOM & DXF strategy hooks.</p>
+      <button id="btn-screenshot" class="btn" style="width:100%; margin-top:8px;">Download PNG</button>
+    </div>
+  </aside>
+
+  <script>
+    const TAU = Math.PI * 2;
+    const uuid = () => crypto.randomUUID();
+
+    class Viewport {
+      constructor() {
+        this.zoomLevel = 1;
+        this.panOffset = { x: 0, y: 0 };
+      }
+      screenToWorld(x, y) {
+        return {
+          x: (x - this.panOffset.x) / this.zoomLevel,
+          y: (y - this.panOffset.y) / this.zoomLevel,
+        };
+      }
+      worldToScreen(x, y) {
+        return {
+          x: x * this.zoomLevel + this.panOffset.x,
+          y: y * this.zoomLevel + this.panOffset.y,
+        };
+      }
+    }
+
+    class GardenObject {
+      constructor({ id = uuid(), position = { x: 0, y: 0 }, rotation = 0, zIndex = 0 }) {
+        this.id = id;
+        this.position = position;
+        this.rotation = rotation;
+        this.zIndex = zIndex;
+        this.isSelected = false;
+      }
+      getBoundingBox() { return { x: this.position.x, y: this.position.y, w: 0, h: 0 }; }
+    }
+
+    class SurfaceObject extends GardenObject {
+      constructor({ points = [], textureId = 'grass', ...opts }) {
+        super(opts);
+        this.points = points;
+        this.textureId = textureId;
+      }
+      getBoundingBox() {
+        const xs = this.points.map(p => p.x);
+        const ys = this.points.map(p => p.y);
+        return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+      }
+    }
+
+    class LinearObject extends GardenObject {
+      constructor({ startPoint, endPoint, thickness = 0.2, ...opts }) {
+        super(opts);
+        this.startPoint = startPoint;
+        this.endPoint = endPoint;
+        this.thickness = thickness;
+      }
+      getBoundingBox() {
+        const x = Math.min(this.startPoint.x, this.endPoint.x);
+        const y = Math.min(this.startPoint.y, this.endPoint.y);
+        const w = Math.abs(this.startPoint.x - this.endPoint.x);
+        const h = Math.abs(this.startPoint.y - this.endPoint.y);
+        return { x, y, w, h };
+      }
+    }
+
+    class AssetObject extends GardenObject {
+      constructor({ catalogItemId, dimensions = { x: 1, y: 1 }, scale = { x: 1, y: 1 }, ...opts }) {
+        super(opts);
+        this.catalogItemId = catalogItemId;
+        this.dimensions = dimensions;
+        this.scale = scale;
+      }
+      getBoundingBox() {
+        return {
+          x: this.position.x - (this.dimensions.x * this.scale.x) / 2,
+          y: this.position.y - (this.dimensions.y * this.scale.y) / 2,
+          w: this.dimensions.x * this.scale.x,
+          h: this.dimensions.y * this.scale.y,
+        };
+      }
+    }
+
+    class GardenPlan {
+      constructor(width = 20, height = 12) {
+        this.width = width;
+        this.height = height;
+        this.layers = new Map([
+          ['surfaces', []],
+          ['objects', []],
+          ['linear', []],
+        ]);
+      }
+      addObject(obj, layer = 'objects') { this.layers.get(layer).push(obj); }
+      removeObject(id) {
+        for (const layer of this.layers.values()) {
+          const idx = layer.findIndex(o => o.id === id);
+          if (idx >= 0) { layer.splice(idx, 1); return true; }
+        }
+        return false;
+      }
+      getObjects() {
+        return Array.from(this.layers.values()).flat();
+      }
+      toJSON() {
+        return {
+          meta: { version: '1.2', projectName: 'Garden Planner Demo', units: 'meters', created: new Date().toISOString() },
+          scene: {
+            width: this.width,
+            height: this.height,
+            layers: {
+              surfaces: this.layers.get('surfaces').map(s => ({ id: s.id, type: 'SURFACE', texture: s.textureId, geometry: s.points.map(p => [p.x, p.y]) })),
+              objects: this.layers.get('objects').map(o => ({ id: o.id, type: 'ASSET', sku: o.catalogItemId, position: o.position, rotation: o.rotation, scale: o.scale, dimensions: { w: o.dimensions.x, h: o.dimensions.y }, z_index: o.zIndex })),
+              linear: this.layers.get('linear').map(l => ({ id: l.id, type: 'WALL', start: l.startPoint, end: l.endPoint, thickness: l.thickness })),
+            },
+          },
+        };
+      }
+    }
+
+    class CatalogService {
+      constructor(items) { this.items = items; }
+      getCategories() { return [...new Set(this.items.map(i => i.category))]; }
+      getItem(sku) { return this.items.find(i => i.sku === sku); }
+    }
+
+    class AssetLoader {
+      constructor() { this.imageCache = new Map(); }
+      async loadAssets(urls) {
+        const promises = urls.map(url => this.load(url));
+        return Promise.all(promises);
+      }
+      load(url) {
+        if (this.imageCache.has(url)) return Promise.resolve(this.imageCache.get(url));
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => { this.imageCache.set(url, img); resolve(img); };
+          img.onerror = reject;
+          img.src = url;
+        });
+      }
+      getAsset(id) { return this.imageCache.get(id); }
+    }
+
+    class PatternGenerator {
+      createTilingPattern(ctx, color) {
+        const off = document.createElement('canvas');
+        off.width = off.height = 32;
+        const octx = off.getContext('2d');
+        octx.fillStyle = color;
+        octx.fillRect(0, 0, 32, 32);
+        octx.strokeStyle = 'rgba(0,0,0,0.15)';
+        octx.beginPath();
+        octx.moveTo(0, 0); octx.lineTo(32, 32);
+        octx.moveTo(16, 0); octx.lineTo(32, 16);
+        octx.stroke();
+        return ctx.createPattern(off, 'repeat');
+      }
+    }
+
+    class JSONExporter { export(plan) { return plan.toJSON(); } }
+    class BillOfMaterialsExporter { export(plan) { return plan.layers.get('objects').map(o => `${o.catalogItemId},1` ).join('\n'); } }
+    class DXFExporter { export(plan) { return `0\nSECTION\n2\nENTITIES\n999\nObjects: ${plan.getObjects().length}\n0\nENDSEC\n0\nEOF`; } }
+
+    class CanvasRenderer {
+      constructor(canvas, assets, patternGenerator) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.assets = assets;
+        this.patternGenerator = patternGenerator;
+      }
+      renderFrame(plan, viewport, selectionManager, smartGuides) {
+        const { ctx } = this;
+        ctx.save();
+        this.resize();
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.drawGrid(plan, viewport);
+        this.drawSurfaces(plan, viewport);
+        this.drawLinear(plan, viewport);
+        this.drawAssets(plan, viewport);
+        if (selectionManager) this.drawSelection(selectionManager, viewport);
+        if (smartGuides) smartGuides.renderGuides(ctx, viewport);
+        ctx.restore();
+      }
+      resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const { clientWidth, clientHeight } = this.canvas;
+        if (this.canvas.width !== clientWidth * dpr || this.canvas.height !== clientHeight * dpr) {
+          this.canvas.width = clientWidth * dpr;
+          this.canvas.height = clientHeight * dpr;
+          this.ctx.scale(dpr, dpr);
+        }
+      }
+      drawGrid(plan, viewport) {
+        const { ctx } = this;
+        const step = 1 * viewport.zoomLevel;
+        ctx.save();
+        ctx.translate(viewport.panOffset.x, viewport.panOffset.y);
+        ctx.strokeStyle = 'rgba(226,232,240,0.06)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= plan.width; x++) {
+          ctx.beginPath();
+          ctx.moveTo(x * viewport.zoomLevel, 0);
+          ctx.lineTo(x * viewport.zoomLevel, plan.height * viewport.zoomLevel);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= plan.height; y++) {
+          ctx.beginPath();
+          ctx.moveTo(0, y * viewport.zoomLevel);
+          ctx.lineTo(plan.width * viewport.zoomLevel, y * viewport.zoomLevel);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      drawSurfaces(plan, viewport) {
+        const { ctx } = this;
+        ctx.save();
+        ctx.translate(viewport.panOffset.x, viewport.panOffset.y);
+        ctx.scale(viewport.zoomLevel, viewport.zoomLevel);
+        for (const surface of plan.layers.get('surfaces')) {
+          ctx.beginPath();
+          surface.points.forEach((p, i) => { i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+          ctx.closePath();
+          ctx.fillStyle = this.patternGenerator.createTilingPattern(ctx, surface.textureId === 'paving' ? '#6b7280' : '#15803d');
+          ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+          ctx.lineWidth = 0.05;
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      drawLinear(plan, viewport) {
+        const { ctx } = this;
+        ctx.save();
+        ctx.translate(viewport.panOffset.x, viewport.panOffset.y);
+        ctx.scale(viewport.zoomLevel, viewport.zoomLevel);
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 0.25;
+        ctx.lineCap = 'round';
+        for (const line of plan.layers.get('linear')) {
+          ctx.beginPath();
+          ctx.moveTo(line.startPoint.x, line.startPoint.y);
+          ctx.lineTo(line.endPoint.x, line.endPoint.y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      drawAssets(plan, viewport) {
+        const { ctx } = this;
+        ctx.save();
+        ctx.translate(viewport.panOffset.x, viewport.panOffset.y);
+        for (const obj of plan.layers.get('objects').sort((a,b)=>a.zIndex-b.zIndex)) {
+          ctx.save();
+          const screen = viewport.worldToScreen(obj.position.x, obj.position.y);
+          ctx.translate(screen.x - viewport.panOffset.x, screen.y - viewport.panOffset.y);
+          ctx.rotate((obj.rotation * Math.PI) / 180);
+          const w = obj.dimensions.x * obj.scale.x * viewport.zoomLevel;
+          const h = obj.dimensions.y * obj.scale.y * viewport.zoomLevel;
+          ctx.fillStyle = obj.isSelected ? 'rgba(16,185,129,0.5)' : 'rgba(59,130,246,0.65)';
+          ctx.strokeStyle = 'rgba(15,23,42,0.8)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(-w / 2, -h / 2, w, h, 6);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#0b1224';
+          ctx.font = '12px Inter';
+          ctx.textAlign = 'center';
+          ctx.fillText(obj.catalogItemId, 0, 4);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+      drawSelection(selectionManager, viewport) {
+        const { ctx } = this;
+        const obj = selectionManager.getSelected();
+        if (!obj) return;
+        const box = obj.getBoundingBox();
+        const topLeft = viewport.worldToScreen(box.x, box.y);
+        const size = { w: box.w * viewport.zoomLevel, h: box.h * viewport.zoomLevel };
+        ctx.save();
+        ctx.strokeStyle = 'rgba(52,211,153,0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6,4]);
+        ctx.strokeRect(topLeft.x, topLeft.y, size.w, size.h);
+        ctx.setLineDash([]);
+        const handles = selectionManager.transformGizmo.handles;
+        handles.forEach(h => {
+          const pos = viewport.worldToScreen(h.x, h.y);
+          ctx.fillStyle = '#22d3ee';
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, 5, 0, TAU);
+          ctx.fill();
+        });
+        ctx.restore();
+      }
+    }
+
+    class TransformGizmo {
+      constructor(bounds) {
+        this.bounds = bounds;
+        this.handles = this.createHandles(bounds);
+      }
+      createHandles(bounds) {
+        const pts = [
+          { x: bounds.x, y: bounds.y },
+          { x: bounds.x + bounds.w, y: bounds.y },
+          { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+          { x: bounds.x, y: bounds.y + bounds.h },
+        ];
+        return pts;
+      }
+      render() {}
+      hitTest(worldPos) {
+        return this.handles.find(h => Math.hypot(h.x - worldPos.x, h.y - worldPos.y) < 0.4);
+      }
+    }
+
+    class SmartGuideSystem {
+      constructor() { this.lines = []; this.snapDistance = 0.5; }
+      findSnaps(activeObj, otherObjects) {
+        this.lines = [];
+        const a = activeObj.getBoundingBox();
+        otherObjects.forEach(o => {
+          const b = o.getBoundingBox();
+          const dx = Math.abs(a.x - b.x);
+          const dy = Math.abs(a.y - b.y);
+          if (dx < this.snapDistance) this.lines.push({ axis: 'y', x: b.x, from: Math.min(a.y, b.y), to: Math.max(a.y + a.h, b.y + b.h) });
+          if (dy < this.snapDistance) this.lines.push({ axis: 'x', y: b.y, from: Math.min(a.x, b.x), to: Math.max(a.x + a.w, b.x + b.w) });
+        });
+        return this.lines;
+      }
+      renderGuides(ctx, viewport) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(236,72,153,0.9)';
+        ctx.lineWidth = 1.5;
+        this.lines.forEach(line => {
+          if (line.axis === 'y') {
+            const start = viewport.worldToScreen(line.x, line.from);
+            const end = viewport.worldToScreen(line.x, line.to);
+            ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+          } else {
+            const start = viewport.worldToScreen(line.from, line.y);
+            const end = viewport.worldToScreen(line.to, line.y);
+            ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+          }
+        });
+        ctx.restore();
+      }
+    }
+
+    class SelectionManager {
+      constructor() {
+        this.selectedObjects = new Set();
+        this.transformGizmo = null;
+      }
+      select(obj) {
+        this.clear();
+        if (obj) {
+          this.selectedObjects.add(obj.id);
+          obj.isSelected = true;
+          this.transformGizmo = new TransformGizmo(obj.getBoundingBox());
+          this._cacheSelected = obj;
+        }
+      }
+      getSelected(all) {
+        if (!this.selectedObjects.size || !all) return this._cacheSelected;
+        this._cacheSelected = all.find(o => this.selectedObjects.has(o.id));
+        return this._cacheSelected;
+      }
+      clear(all) {
+        if (all) all.forEach(o => (o.isSelected = false));
+        this.selectedObjects.clear();
+        this.transformGizmo = null;
+        this._cacheSelected = null;
+      }
+    }
+
+    class ToolManager { constructor() { this.activeTool = null; } setTool(tool) { this.activeTool = tool; } }
+    class HistoryManager { constructor() { this.stack = []; this.index = -1; } push(plan) { const snapshot = JSON.stringify(plan.toJSON()); this.stack = this.stack.slice(0, this.index + 1); this.stack.push(snapshot); this.index++; } }
+
+    class SelectionTool {
+      constructor(app) { this.app = app; this.dragging = false; this.offset = { x:0, y:0 }; }
+      onDragStart(worldPos) {
+        const hit = this.app.hitTest(worldPos);
+        this.app.selectionManager.clear(this.app.plan.getObjects());
+        if (hit) {
+          this.app.selectionManager.select(hit);
+          const box = hit.getBoundingBox();
+          this.offset = { x: worldPos.x - box.x, y: worldPos.y - box.y };
+          this.dragging = true;
+        }
+      }
+      onDragMove(worldPos) {
+        const obj = this.app.selectionManager.getSelected(this.app.plan.getObjects());
+        if (this.dragging && obj) {
+          obj.position = worldPos;
+          this.app.smartGuides.findSnaps(obj, this.app.plan.getObjects().filter(o => o !== obj));
+          this.app.renderer.renderFrame(this.app.plan, this.app.viewport, this.app.selectionManager, this.app.smartGuides);
+          this.app.syncInspector(obj);
+        }
+      }
+      onDragEnd() { this.dragging = false; this.app.smartGuides.lines = []; }
+    }
+
+    class PlaceTool {
+      constructor(app) { this.app = app; }
+      onDragStart(worldPos) {
+        if (!this.app.activeCatalog) return;
+        const item = this.app.catalog.getItem(this.app.activeCatalog);
+        const obj = new AssetObject({
+          catalogItemId: item.sku,
+          position: worldPos,
+          dimensions: { x: item.defaultSize.x, y: item.defaultSize.y },
+          scale: { x: 1, y: 1 },
+          zIndex: 10,
+        });
+        this.app.plan.addObject(obj, 'objects');
+        this.app.selectionManager.select(obj);
+        this.app.renderer.renderFrame(this.app.plan, this.app.viewport, this.app.selectionManager, this.app.smartGuides);
+        this.app.syncInspector(obj);
+      }
+      onDragMove() {}
+      onDragEnd() {}
+    }
+
+    class DrawTool {
+      constructor(app) { this.app = app; this.points = []; this.active = false; }
+      onDragStart(worldPos) {
+        this.active = true;
+        this.points.push(worldPos);
+      }
+      onDragMove(worldPos) {
+        if (!this.active) return;
+        const temp = [...this.points, worldPos];
+        this.app.tempSurface = temp;
+        this.app.renderer.renderFrame(this.app.plan, this.app.viewport, this.app.selectionManager, this.app.smartGuides);
+        this.app.drawTempSurface(temp);
+      }
+      onDragEnd() {}
+      onDoubleClick() {
+        if (this.points.length < 3) { this.points = []; return; }
+        const surface = new SurfaceObject({ points: this.points.map(p => ({ ...p })), textureId: 'grass' });
+        this.app.plan.addObject(surface, 'surfaces');
+        this.points = [];
+        this.app.tempSurface = null;
+        this.app.renderer.renderFrame(this.app.plan, this.app.viewport, this.app.selectionManager, this.app.smartGuides);
+      }
+    }
+
+    class InputHandler {
+      constructor(canvas, viewport, toolManager) {
+        this.canvas = canvas;
+        this.viewport = viewport;
+        this.toolManager = toolManager;
+        this.dragging = false;
+        this.register();
+      }
+      register() {
+        this.canvas.addEventListener('mousedown', e => {
+          this.dragging = true;
+          this.toolManager.activeTool?.onDragStart?.(this.toWorld(e));
+        });
+        this.canvas.addEventListener('mousemove', e => {
+          if (!this.dragging) return;
+          this.toolManager.activeTool?.onDragMove?.(this.toWorld(e));
+        });
+        this.canvas.addEventListener('mouseup', e => {
+          this.dragging = false;
+          this.toolManager.activeTool?.onDragEnd?.(this.toWorld(e));
+        });
+        this.canvas.addEventListener('dblclick', e => {
+          this.toolManager.activeTool?.onDoubleClick?.(this.toWorld(e));
+        });
+        this.canvas.addEventListener('wheel', e => {
+          e.preventDefault();
+          const delta = e.deltaY < 0 ? 1.1 : 0.9;
+          this.viewport.zoomLevel = Math.min(8, Math.max(0.4, this.viewport.zoomLevel * delta));
+        });
+      }
+      toWorld(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        return this.viewport.screenToWorld(x, y);
+      }
+    }
+
+    class GardenApp {
+      constructor() {
+        this.canvas = document.getElementById('canvas');
+        this.renderer = new CanvasRenderer(this.canvas, new AssetLoader(), new PatternGenerator());
+        this.viewport = new Viewport();
+        this.toolManager = new ToolManager();
+        this.selectionManager = new SelectionManager();
+        this.smartGuides = new SmartGuideSystem();
+        this.historyManager = new HistoryManager();
+        this.catalog = new CatalogService([
+          { sku: 'tree-oak', name: 'Oak tree', defaultSize: { x: 1.2, y: 1.2 }, category: 'Trees' },
+          { sku: 'chair-001', name: 'Garden chair', defaultSize: { x: 0.6, y: 0.6 }, category: 'Furniture' },
+          { sku: 'table-wood', name: 'Wooden table', defaultSize: { x: 1.4, y: 0.7 }, category: 'Furniture' },
+        ]);
+        this.plan = new GardenPlan();
+        this.tempSurface = null;
+        this.activeCatalog = null;
+        this.input = new InputHandler(this.canvas, this.viewport, this.toolManager);
+        this.registerUI();
+        this.useSelectionTool();
+        this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides);
+      }
+      useSelectionTool() { this.toolManager.setTool(new SelectionTool(this)); this.highlightTool('select'); }
+      usePlaceTool() { this.toolManager.setTool(new PlaceTool(this)); this.highlightTool('place'); }
+      useDrawTool() { this.toolManager.setTool(new DrawTool(this)); this.highlightTool('draw'); }
+      highlightTool(name) {
+        document.querySelectorAll('.tool').forEach(el => el.classList.toggle('active', el.dataset.tool === name));
+        this.setStatus(`Active tool: ${name}`);
+      }
+      hitTest(worldPos) {
+        const all = this.plan.getObjects();
+        for (let i = all.length - 1; i >= 0; i--) {
+          const obj = all[i];
+          const box = obj.getBoundingBox();
+          if (worldPos.x >= box.x && worldPos.x <= box.x + box.w && worldPos.y >= box.y && worldPos.y <= box.y + box.h) return obj;
+        }
+        return null;
+      }
+      setStatus(msg) { document.getElementById('status').textContent = msg; }
+      drawTempSurface(points) {
+        const ctx = this.canvas.getContext('2d');
+        ctx.save();
+        ctx.translate(this.viewport.panOffset.x, this.viewport.panOffset.y);
+        ctx.scale(this.viewport.zoomLevel, this.viewport.zoomLevel);
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 0.08;
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        ctx.stroke();
+        ctx.restore();
+      }
+      syncInspector(obj) {
+        const fields = {
+          name: document.getElementById('sel-name'),
+          x: document.getElementById('sel-x'),
+          y: document.getElementById('sel-y'),
+          rot: document.getElementById('sel-rot'),
+          w: document.getElementById('sel-w'),
+          h: document.getElementById('sel-h'),
+        };
+        if (!obj) {
+          document.getElementById('selection-empty').style.display = 'block';
+          document.getElementById('selection-fields').style.display = 'none';
+          return;
+        }
+        document.getElementById('selection-empty').style.display = 'none';
+        document.getElementById('selection-fields').style.display = 'block';
+        fields.name.value = obj.catalogItemId || obj.textureId || 'Surface';
+        fields.x.value = obj.position?.x?.toFixed(2) ?? 0;
+        fields.y.value = obj.position?.y?.toFixed(2) ?? 0;
+        fields.rot.value = obj.rotation ?? 0;
+        fields.w.value = obj.dimensions?.x?.toFixed(2) ?? obj.getBoundingBox().w.toFixed(2);
+        fields.h.value = obj.dimensions?.y?.toFixed(2) ?? obj.getBoundingBox().h.toFixed(2);
+      }
+      loadPlan(json) {
+        const plan = new GardenPlan(json.scene.width, json.scene.height);
+        json.scene.layers.surfaces.forEach(s => plan.addObject(new SurfaceObject({ id: s.id, points: s.geometry.map(([x,y]) => ({ x, y })), textureId: s.texture }), 'surfaces')));
+        json.scene.layers.objects.forEach(o => plan.addObject(new AssetObject({ id: o.id, catalogItemId: o.sku, position: o.position, rotation: o.rotation, scale: o.scale, dimensions: { x: o.dimensions.w, y: o.dimensions.h }, zIndex: o.z_index }), 'objects')));
+        json.scene.layers.linear.forEach(l => plan.addObject(new LinearObject({ id: l.id, startPoint: l.start, endPoint: l.end, thickness: l.thickness }), 'linear')));
+        this.plan = plan;
+        document.getElementById('scene-width').value = plan.width;
+        document.getElementById('scene-height').value = plan.height;
+        this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides);
+      }
+      registerUI() {
+        const tools = [
+          { name: 'select', label: 'Select/Edit', action: () => this.useSelectionTool() },
+          { name: 'place', label: 'Place asset', action: () => this.usePlaceTool() },
+          { name: 'draw', label: 'Draw surface', action: () => this.useDrawTool() },
+          { name: 'pan', label: 'Pan view', action: () => { this.viewport.panOffset.x += 10; this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); this.highlightTool('select'); } },
+        ];
+        const toolContainer = document.getElementById('tool-buttons');
+        tools.forEach(t => {
+          const div = document.createElement('div');
+          div.className = 'tool';
+          div.dataset.tool = t.name;
+          div.textContent = t.label;
+          div.onclick = t.action;
+          toolContainer.appendChild(div);
+        });
+
+        const catalogList = document.getElementById('catalog-list');
+        this.catalog.items.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'catalog-item';
+          div.innerHTML = `<div><strong>${item.name}</strong><br/><small>${item.sku}</small></div><span class="tag">${item.category}</span>`;
+          div.onclick = () => {
+            document.querySelectorAll('.catalog-item').forEach(el => el.classList.remove('active'));
+            div.classList.add('active');
+            this.activeCatalog = item.sku;
+            this.usePlaceTool();
+          };
+          catalogList.appendChild(div);
+        });
+
+        document.getElementById('scene-width').onchange = e => { this.plan.width = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); };
+        document.getElementById('scene-height').onchange = e => { this.plan.height = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); };
+        document.getElementById('btn-load').onclick = async () => {
+          const data = await fetch('data-spec.json').then(r => r.json());
+          this.loadPlan(data);
+          this.setStatus('Sample GDF plan loaded');
+        };
+        document.getElementById('btn-save').onclick = () => {
+          const json = this.plan.toJSON();
+          const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+          this.downloadBlob(blob, 'garden-plan.gdf.json');
+        };
+        document.getElementById('btn-bom').onclick = () => {
+          const exporter = new BillOfMaterialsExporter();
+          const csv = exporter.export(this.plan);
+          const blob = new Blob([csv], { type: 'text/csv' });
+          this.downloadBlob(blob, 'bill-of-materials.csv');
+        };
+        document.getElementById('btn-screenshot').onclick = () => {
+          this.downloadBlob(this.canvasToBlob(), 'garden-plan.png');
+        };
+        document.getElementById('btn-reset').onclick = () => { this.plan = new GardenPlan(); this.selectionManager.clear(); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); this.setStatus('Scene reset'); };
+
+        document.getElementById('sel-x').onchange = e => { const obj = this.selectionManager.getSelected(this.plan.getObjects()); if (obj) { obj.position.x = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); } };
+        document.getElementById('sel-y').onchange = e => { const obj = this.selectionManager.getSelected(this.plan.getObjects()); if (obj) { obj.position.y = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); } };
+        document.getElementById('sel-rot').onchange = e => { const obj = this.selectionManager.getSelected(this.plan.getObjects()); if (obj) { obj.rotation = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); } };
+        document.getElementById('sel-w').onchange = e => { const obj = this.selectionManager.getSelected(this.plan.getObjects()); if (obj && obj.dimensions) { obj.dimensions.x = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); } };
+        document.getElementById('sel-h').onchange = e => { const obj = this.selectionManager.getSelected(this.plan.getObjects()); if (obj && obj.dimensions) { obj.dimensions.y = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); } };
+
+        window.addEventListener('resize', () => this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides));
+      }
+      downloadBlob(blobOrPromise, name) {
+        const promise = blobOrPromise instanceof Promise ? blobOrPromise : Promise.resolve(blobOrPromise);
+        promise.then(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = name; a.click();
+          URL.revokeObjectURL(url);
+        });
+      }
+      canvasToBlob() {
+        return new Promise(resolve => this.canvas.toBlob(resolve));
+      }
+      init() {}
+      savePlan() { return this.plan.toJSON(); }
+    }
+
+    const app = new GardenApp();
+    window.app = app;
+  </script>
+</body>
+</html>
