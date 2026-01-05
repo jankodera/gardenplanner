@@ -722,7 +722,7 @@
       }
       loadPlan(json) {
         const plan = new GardenPlan(json.scene.width, json.scene.height);
-        json.scene.layers.surfaces.forEach(s => plan.addObject(new SurfaceObject({ id: s.id, points: s.geometry.map(([x,y]) => ({ x, y })), textureId: s.texture }), 'surfaces'));
+        json.scene.layers.surfaces.forEach(s => plan.addObject(new SurfaceObject({ id: s.id, points: s.geometry.map(([x,y]) => ({ x, y })), textureId: s.texture }), 'surfaces')));
         json.scene.layers.objects.forEach(o => plan.addObject(new AssetObject({ id: o.id, catalogItemId: o.sku, position: o.position, rotation: o.rotation, scale: o.scale, dimensions: { x: o.dimensions.w, y: o.dimensions.h }, zIndex: o.z_index }), 'objects')));
         json.scene.layers.linear.forEach(l => plan.addObject(new LinearObject({ id: l.id, startPoint: l.start, endPoint: l.end, thickness: l.thickness }), 'linear')));
         this.plan = plan;
