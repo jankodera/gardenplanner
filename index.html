@@ -665,7 +665,6 @@
         this.input = new InputHandler(this.canvas, this.viewport, this.toolManager);
         this.registerUI();
         this.useSelectionTool();
-        this.fitViewportToPlan();
         this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides);
       }
       useSelectionTool() { this.toolManager.setTool(new SelectionTool(this)); this.highlightTool('select'); }
@@ -723,29 +722,13 @@
       }
       loadPlan(json) {
         const plan = new GardenPlan(json.scene.width, json.scene.height);
-        json.scene.layers.surfaces.forEach(s => plan.addObject(new SurfaceObject({ id: s.id, points: s.geometry.map(([x,y]) => ({ x, y })), textureId: s.texture }), 'surfaces'));
-        json.scene.layers.objects.forEach(o => plan.addObject(new AssetObject({ id: o.id, catalogItemId: o.sku, position: o.position, rotation: o.rotation, scale: o.scale, dimensions: { x: o.dimensions.w, y: o.dimensions.h }, zIndex: o.z_index }), 'objects')));
-        json.scene.layers.linear.forEach(l => plan.addObject(new LinearObject({ id: l.id, startPoint: l.start, endPoint: l.end, thickness: l.thickness }), 'linear')));
+        json.scene.layers.surfaces.forEach(s => plan.addObject(new SurfaceObject({ id: s.id, points: s.geometry.map(([x,y]) => ({ x, y })), textureId: s.texture }), 'surfaces')));
+        json.scene.layers.objects.forEach(o => plan.addObject(new AssetObject({ id: o.id, catalogItemId: o.sku, position: o.position, rotation: o.rotation, scale: o.scale, dimensions: { x: o.dimensions.w, y: o.dimensions.h }, zIndex: o.z_index }), 'objects'));
+        json.scene.layers.linear.forEach(l => plan.addObject(new LinearObject({ id: l.id, startPoint: l.start, endPoint: l.end, thickness: l.thickness }), 'linear'));
         this.plan = plan;
         document.getElementById('scene-width').value = plan.width;
         document.getElementById('scene-height').value = plan.height;
-        this.fitViewportToPlan();
         this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides);
-      }
-      fitViewportToPlan() {
-        const rect = this.canvas.getBoundingClientRect();
-        const padding = 48;
-        const availableWidth = Math.max(1, rect.width - padding * 2);
-        const availableHeight = Math.max(1, rect.height - padding * 2);
-        const scale = Math.min(6, Math.max(0.4, Math.min(
-          availableWidth / Math.max(1, this.plan.width),
-          availableHeight / Math.max(1, this.plan.height),
-        )));
-        this.viewport.zoomLevel = scale;
-        this.viewport.panOffset = {
-          x: (rect.width - this.plan.width * scale) / 2,
-          y: (rect.height - this.plan.height * scale) / 2,
-        };
       }
       registerUI() {
         const tools = [
@@ -778,10 +761,10 @@
           catalogList.appendChild(div);
         });
 
-        document.getElementById('scene-width').onchange = e => { this.plan.width = parseFloat(e.target.value); this.fitViewportToPlan(); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); };
-        document.getElementById('scene-height').onchange = e => { this.plan.height = parseFloat(e.target.value); this.fitViewportToPlan(); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); };
+        document.getElementById('scene-width').onchange = e => { this.plan.width = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); };
+        document.getElementById('scene-height').onchange = e => { this.plan.height = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); };
         document.getElementById('btn-load').onclick = async () => {
-          const data = await this.loadSampleData();
+          const data = await fetch('data-spec.json').then(r => r.json());
           this.loadPlan(data);
           this.setStatus('Sample GDF plan loaded');
         };
@@ -799,13 +782,7 @@
         document.getElementById('btn-screenshot').onclick = () => {
           this.downloadBlob(this.canvasToBlob(), 'garden-plan.png');
         };
-        document.getElementById('btn-reset').onclick = () => {
-          this.plan = new GardenPlan();
-          this.selectionManager.clear();
-          this.fitViewportToPlan();
-          this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides);
-          this.setStatus('Scene reset');
-        };
+        document.getElementById('btn-reset').onclick = () => { this.plan = new GardenPlan(); this.selectionManager.clear(); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); this.setStatus('Scene reset'); };
 
         document.getElementById('sel-x').onchange = e => { const obj = this.selectionManager.getSelected(this.plan.getObjects()); if (obj) { obj.position.x = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); } };
         document.getElementById('sel-y').onchange = e => { const obj = this.selectionManager.getSelected(this.plan.getObjects()); if (obj) { obj.position.y = parseFloat(e.target.value); this.renderer.renderFrame(this.plan, this.viewport, this.selectionManager, this.smartGuides); } };
@@ -827,81 +804,12 @@
       canvasToBlob() {
         return new Promise(resolve => this.canvas.toBlob(resolve));
       }
-      async loadSampleData() {
-        const embedded = document.getElementById('sample-data');
-        const parseEmbedded = () => embedded ? JSON.parse(embedded.textContent) : null;
-        if (window.location.protocol === 'file:') {
-          const data = parseEmbedded();
-          if (!data) {
-            throw new Error('Sample data unavailable in file mode.');
-          }
-          return data;
-        }
-        try {
-          const response = await fetch('data-spec.json');
-          if (!response.ok) {
-            throw new Error(`Sample fetch failed: ${response.status}`);
-          }
-          return await response.json();
-        } catch (error) {
-          const data = parseEmbedded();
-          if (data) {
-            return data;
-          }
-          throw error;
-        }
-      }
       init() {}
       savePlan() { return this.plan.toJSON(); }
     }
 
     const app = new GardenApp();
     window.app = app;
-  </script>
-  <script id="sample-data" type="application/json">
-{
-  "meta": {
-    "version": "1.2",
-    "projectName": "Moje Zahrada 2026",
-    "created": "2026-01-04T22:15:00Z",
-    "units": "meters"
-  },
-  "scene": {
-    "width": 25.0,
-    "height": 15.0,
-    "layers": {
-      "surfaces": [
-        {
-          "id": "s1",
-          "type": "SURFACE",
-          "texture": "grass_01",
-          "geometry": [[0,0], [25,0], [25,15], [0,15]]
-        }
-      ],
-      "objects": [
-        {
-          "id": "obj_123",
-          "sku": "gardena-grill-xyz",
-          "type": "ASSET",
-          "position": { "x": 5.5, "y": 3.2 },
-          "rotation": 45,
-          "scale": { "x": 1.0, "y": 1.0 },
-          "dimensions": { "w": 1.2, "h": 0.8 },
-          "z_index": 10
-        }
-      ],
-      "linear": [
-        {
-          "id": "wall_1",
-          "type": "WALL",
-          "start": { "x": 0, "y": 0 },
-          "end": { "x": 0, "y": 15 },
-          "thickness": 0.2
-        }
-      ]
-    }
-  }
-}
   </script>
 </body>
 </html>
